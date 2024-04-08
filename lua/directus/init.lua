@@ -11,16 +11,12 @@ local utils = require("directus.utils")
 
 M = {}
 
----@class CollectionsConfig
----@field collection string Name of the collection in Directus
----@field filters table Default filters to apply
-
 ---@class config
 ---@field url string The directus url
 ---@field token string Access token with admin credentials
----@field collections CollectionsConfig Configured Directus collections
-M.config = {}
+---@field show_hidden boolean Display any hidden collection/fields
 
+M.config = {}
 
 --------------------------------------------------------------------------------
 ---Get all Directus Collections
@@ -40,17 +36,7 @@ M.directus_collections = function(opts)
                     return {}
                 end
 
-                -- filter hidden collections
-                local collections = {}
-                for _, collection in ipairs(data.data) do
-                    if not collection.meta.hidden then
-                        table.insert(collections, collection)
-                    end
-                end
-
-                -- Missing some collections without a meta.sort property
-                -- utils.merge_sort(collections)
-
+                local collections = utils.filter_hidden(data.data)
                 return collections
             end,
             entry_maker = function(entry)
@@ -73,9 +59,9 @@ M.directus_collections = function(opts)
 
         attach_mappings = function(prompt_bufnr, map)
             actions.select_default:replace(function()
-                -- open new buffer with JSON data
-                actions.close(prompt_bufnr)
                 local selection = action_state.get_selected_entry()
+                actions.close(prompt_bufnr)
+
                 M.directus_fields(opts, selection.display)
             end)
             return true
@@ -85,8 +71,14 @@ end
 
 --------------------------------------------------------------------------------
 ---Get fields for a given collection
----@param opts any
+---@param opts table telescope options
+---@param collection string Directus collection name
 M.directus_fields = function(opts, collection)
+    if collection == nil then
+        vim.notify("Must provide collection", "error", { title = "Directus Fields" })
+        return
+    end
+
     pickers.new(opts, {
         prompt_title = "Field",
         sorter = config.generic_sorter(opts),
@@ -101,25 +93,35 @@ M.directus_fields = function(opts, collection)
                     return {}
                 end
 
-                -- filter hidden fields
-                local fields = {}
-                for _, field in ipairs(data.data) do
-                    if not field.meta.hidden and field.meta.group == vim.NIL then
-                        table.insert(fields, field)
-                    end
-                end
-
                 -- top level fields have a meta-group = vim.NIL
 
-                -- sort fields
+                local fields = utils.filter_hidden(data.data)
                 utils.merge_sort(fields)
 
+                -- for idx, val in ipairs(fields) do
+                --     if val.meta.group ~= vim.NIL then
+                --         for group_idx, group_val in ipairs(fields) do
+                --             if group_val.field == val.meta.group then
+                --                 -- P(group_val.field)
+                --                 -- P("-> " .. val.field)
+                --
+                --                 table.insert(fields, group_idx + 2, val)
+                --                 table.remove(fields, idx)
+                --             end
+                --         end
+                --     end
+                -- end
                 return fields
             end,
             entry_maker = function(entry)
+                local prefix = ""
+                if entry.meta.group ~= vim.NIL then
+                    prefix = " -> "
+                end
+
                 return {
                     value = entry,
-                    display = entry.field,
+                    display = prefix .. entry.field,
                     ordinal = entry.field,
                 }
             end
@@ -136,7 +138,7 @@ M.directus_fields = function(opts, collection)
         }),
 
         attach_mappings = function(prompt_bufnr, map)
-            map("i", "bb", function()
+            map("i", "cc", function()
                 M.directus_collections(opts)
             end)
 
@@ -153,7 +155,7 @@ M.directus_fields = function(opts, collection)
                 actions.close(prompt_bufnr)
 
                 local drop_down = require("telescope.themes").get_dropdown({})
-                M.directus_filters(drop_down, collection, selected_fields)
+                M.directus_filters(drop_down, collection, selected_fields, {})
             end)
             return true
         end,
@@ -165,8 +167,14 @@ end
 ---@param opts any The telescope display options (drop_down)
 ---@param collection string Directus collection
 ---@param fields table List of selected fields
-M.directus_filters = function(opts, collection, fields)
-    local url = M.config.url .. "/items/" .. collection .. "?filter={}"
+M.directus_filters = function(opts, collection, fields, collection_filter)
+    if collection == nil then
+        vim.notify("Must provide collection", "error", { title = "Directus Filters" })
+        return
+    end
+
+    local url = M.config.url .. "/items/" .. collection .. "?filter="
+    local prev_bufnr
 
     pickers.new(opts, {
         prompt_title = "Filters",
@@ -186,25 +194,81 @@ M.directus_filters = function(opts, collection, fields)
         previewer = previewers.new_buffer_previewer({
             title = collection .. " query",
             define_preview = function(self, entry)
-                local data = vim.split(vim.inspect(entry.value), "\n")
-                vim.api.nvim_buf_set_lines(self.state.bufnr, 0, 0, true,
-                    vim.tbl_flatten({ url, "", data }))
+                local data = vim.split(vim.inspect(collection_filter), "\n")
+                local display = vim.tbl_flatten({ url, data })
+
+                vim.api.nvim_buf_set_lines(self.state.bufnr, 0, 0, true, display)
+                prev_bufnr = self.state.bufnr
             end
         }),
 
         attach_mappings = function(prompt_bufnr, map)
-            map("i", "bb", function(bufnr)
+            map("i", "cc", function(bufnr)
+                M.directus_collections({})
+            end)
+
+            map("i", "ff", function(bufnr)
                 M.directus_fields({}, collection)
+            end)
+
+            map("i", "ss", function(bufnr)
+                url = url .. vim.json.encode(collection_filter)
+                M.directus_items({}, url, collection)
             end)
 
             actions.select_default:replace(function()
                 local selection = action_state.get_selected_entry()
-                local current_picker = action_state.get_current_picker(prompt_bufnr)
-                local prompt = current_picker:_get_prompt()
+                local filter_field = selection.value.field
 
-                -- capture promt vaue and update filter
+                if selection.value.meta.interface == "select-dropdown" then
+                    local options = {}
+                    for _, val in ipairs(selection.value.meta.options.choices) do
+                        table.insert(options, val.value)
+                    end
 
-                M.directus_items({}, url, collection)
+                    local x = vim.ui.select(options, {
+                        prompt = collection .. ": " .. filter_field,
+                        format_item = function(item)
+                            return item
+                        end,
+                    }, function(choice)
+                        collection_filter[filter_field] = {
+                            _eq = choice
+                        }
+
+                        M.directus_filters(opts, collection, fields, collection_filter)
+                    end)
+                elseif selection.value.meta.interface == "select-dropdown-m2o" then
+                    local related_url = M.config.url .. "/items/" .. selection.value.schema.foreign_key_table
+                    local related_items = api.directus_fetch(related_url, M.config.token)
+
+                    local options = {}
+                    for _, val in ipairs(related_items.data) do
+                        table.insert(options, { id = val.id, slug = val.slug })
+                    end
+
+                    vim.ui.select(options, {
+                        prompt = collection .. ": " .. filter_field,
+                        format_item = function(item)
+                            return filter_field .. ": " .. item.id .. " -> " .. item.slug
+                        end,
+                    }, function(choice)
+                        collection_filter[filter_field] = {
+                            _eq = choice.id
+                        }
+
+                        M.directus_filters(opts, collection, fields, collection_filter)
+                    end)
+                elseif selection.value.meta.interface == "input" then
+                    local input = vim.fn.input("Filter value for " .. filter_field .. ": ")
+                    collection_filter[filter_field] = {
+                        _eq = input
+                    }
+
+                    local data = vim.split(vim.inspect(collection_filter), "\n")
+                    local display = vim.tbl_flatten({ url, data })
+                    vim.api.nvim_buf_set_lines(prev_bufnr, 0, -1, true, display)
+                end
             end)
             return true
         end,
@@ -254,9 +318,14 @@ M.directus_items = function(opts, url, collection)
         }),
 
         attach_mappings = function(prompt_bufnr, map)
-            map("i", "bb", function()
-                M.directus_collections(opts)
+            map("i", "cc", function(bufnr)
+                M.directus_collections({})
             end)
+
+            map("i", "ff", function(bufnr)
+                M.directus_fields({}, collection)
+            end)
+
             return true
         end,
     }):find()
@@ -268,15 +337,48 @@ end
 M.setup = function(directus_config)
     M.config = directus_config
 
-    vim.api.nvim_create_user_command("Directus", function(args)
-        if args.args == "collections" then
+    vim.api.nvim_create_user_command("Directus", function(opts)
+        if opts.fargs[1] == "collections" then
             M.directus_collections({})
+        elseif opts.fargs[1] == "fields" then
+            local collection = opts.fargs[2]
+            if collection == nil then
+                vim.notify("Must specify collection", "info", { title = "Directus Fields" })
+            else
+                M.directus_fields({}, collection)
+            end
         end
     end, {
-        nargs = 1,
+        nargs = "+",
         desc = "Directus user command",
-        complete = function(args, cmd, cursos)
-            return { "collections" }
+        complete = function(arg_lead, cmd, cursor_pos)
+            if string.match(cmd, "fields") then
+                -- :Directus Fields
+                local url = M.config.url .. "/collections"
+                local data = api.directus_fetch(url, M.config.token)
+
+                local collections = {}
+                for _, val in ipairs(utils.filter_hidden(data.data)) do
+                    table.insert(collections, val.collection)
+                end
+
+                local filtered_collections = {}
+                if arg_lead ~= "" then
+                    for _, collection in ipairs(collections) do
+                        if string.match(collection, arg_lead) then
+                            table.insert(filtered_collections, collection)
+                        end
+                    end
+                    return filtered_collections
+                else
+                    return collections
+                end
+            elseif string.match(cmd, "collections") then
+                -- :Directus collections
+                return {}
+            else
+                return { "collections", "fields" }
+            end
         end
     })
 end

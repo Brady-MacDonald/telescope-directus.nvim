@@ -10,7 +10,20 @@ local function merge(left, right, arr)
     local l = 1
 
     while l <= #left and r <= #right do
-        if left[l].meta.sort > right[r].meta.sort then
+        -- Missing some collections without a meta.sort property
+
+        local leftSort = left[l].meta.sort
+        if leftSort == nil or leftSort == vim.NIL then
+            leftSort = 1001
+        end
+
+        local rightSort = right[r].meta.sort
+        if rightSort == nil or vim.NIL then
+            rightSort = 1000
+        end
+
+
+        if leftSort > rightSort then
             arr[i] = left[l]
             l = l + 1
             i = i + 1
@@ -59,6 +72,24 @@ U.merge_sort = function(arr)
     U.merge_sort(right)
 
     merge(left, right, arr)
+end
+
+---Filter the input
+---@param data table Input data
+---@return table collections The filtered data
+U.filter_hidden = function(data)
+    if M.config.show_hidden then
+        return data
+    end
+
+    local filtered_data = {}
+    for _, item in ipairs(data) do
+        if not item.meta.hidden then
+            table.insert(filtered_data, item)
+        end
+    end
+
+    return filtered_data
 end
 
 return U
