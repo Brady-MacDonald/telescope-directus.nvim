@@ -11,6 +11,12 @@ local utils = require("directus.utils")
 
 M = {}
 
+---@class Field
+---@field collection string
+---@field type string
+---@field meta table
+---@field schema table
+
 ---@class config
 ---@field url string The directus url
 ---@field token string Access token with admin credentials
@@ -30,13 +36,11 @@ M.directus_collections = function(opts)
             fn = function()
                 local url = M.config.url .. "/collections"
                 local data = api.directus_fetch(url, M.config.token)
-                if data.errors ~= nil then
-                    local err = data.errors[1].message
-                    vim.notify(err, "error", { title = "Directus Collections" })
-                    return {}
+                if data == nil then
+                    return
                 end
 
-                local collections = utils.filter_hidden(data.data)
+                local collections = utils.filter_hidden(data)
                 return collections
             end,
             entry_maker = function(entry)
@@ -58,11 +62,28 @@ M.directus_collections = function(opts)
         }),
 
         attach_mappings = function(prompt_bufnr, map)
-            actions.select_default:replace(function()
+            map("n", "f", function()
                 local selection = action_state.get_selected_entry()
                 actions.close(prompt_bufnr)
 
                 M.directus_fields(opts, selection.display)
+            end)
+
+            actions.select_default:replace(function()
+                local selection = action_state.get_selected_entry()
+                local drop_down = require("telescope.themes").get_dropdown({})
+
+                local url = M.config.url .. "/fields/" .. selection.value.collection
+                local data = api.directus_fetch(url, M.config.token)
+                if data == nil then
+                    return
+                end
+
+                local fields = utils.filter_hidden(data)
+                utils.merge_sort(fields)
+
+                actions.close(prompt_bufnr)
+                M.directus_filters(drop_down, selection.value.collection, fields, {})
             end)
             return true
         end,
@@ -86,31 +107,17 @@ M.directus_fields = function(opts, collection)
         finder = finders.new_dynamic({
             fn = function()
                 local url = M.config.url .. "/fields/" .. collection
+
                 local data = api.directus_fetch(url, M.config.token)
-                if data.errors ~= nil then
-                    local err = data.errors[1].message
-                    vim.notify(err, "error", { title = "Directus Fields" })
-                    return {}
+                if data == nil then
+                    return
                 end
 
                 -- top level fields have a meta-group = vim.NIL
 
-                local fields = utils.filter_hidden(data.data)
+                local fields = utils.filter_hidden(data)
                 utils.merge_sort(fields)
 
-                -- for idx, val in ipairs(fields) do
-                --     if val.meta.group ~= vim.NIL then
-                --         for group_idx, group_val in ipairs(fields) do
-                --             if group_val.field == val.meta.group then
-                --                 -- P(group_val.field)
-                --                 -- P("-> " .. val.field)
-                --
-                --                 table.insert(fields, group_idx + 2, val)
-                --                 table.remove(fields, idx)
-                --             end
-                --         end
-                --     end
-                -- end
                 return fields
             end,
             entry_maker = function(entry)
@@ -138,7 +145,7 @@ M.directus_fields = function(opts, collection)
         }),
 
         attach_mappings = function(prompt_bufnr, map)
-            map("i", "cc", function()
+            map("n", "c", function()
                 M.directus_collections(opts)
             end)
 
@@ -203,71 +210,86 @@ M.directus_filters = function(opts, collection, fields, collection_filter)
         }),
 
         attach_mappings = function(prompt_bufnr, map)
-            map("i", "cc", function(bufnr)
+            map("n", "c", function(bufnr)
                 M.directus_collections({})
             end)
 
-            map("i", "ff", function(bufnr)
+            map("n", "f", function(bufnr)
                 M.directus_fields({}, collection)
             end)
 
-            map("i", "ss", function(bufnr)
+            map("n", "s", function(bufnr)
                 url = url .. vim.json.encode(collection_filter)
                 M.directus_items({}, url, collection)
             end)
 
             actions.select_default:replace(function()
                 local selection = action_state.get_selected_entry()
-                local filter_field = selection.value.field
 
-                if selection.value.meta.interface == "select-dropdown" then
-                    local options = {}
-                    for _, val in ipairs(selection.value.meta.options.choices) do
-                        table.insert(options, val.value)
-                    end
+                local directus_field = selection.value.field
+                local directus_interface = selection.value.meta.interface
 
-                    local x = vim.ui.select(options, {
-                        prompt = collection .. ": " .. filter_field,
-                        format_item = function(item)
-                            return item
+                if directus_interface == "select-dropdown" then
+                    vim.ui.select(selection.value.meta.options.choices, {
+                        prompt = collection .. ": " .. directus_field,
+                        format_item = function(opt)
+                            return opt.text
                         end,
-                    }, function(choice)
-                        collection_filter[filter_field] = {
-                            _eq = choice
+                    }, function(selected)
+                        collection_filter[directus_field] = {
+                            _eq = selected.value
                         }
 
                         M.directus_filters(opts, collection, fields, collection_filter)
                     end)
-                elseif selection.value.meta.interface == "select-dropdown-m2o" then
-                    local related_url = M.config.url .. "/items/" .. selection.value.schema.foreign_key_table
-                    local related_items = api.directus_fetch(related_url, M.config.token)
+                elseif directus_interface == "select-dropdown-m2o" then
+                    local foreign_key = selection.value.schema.foreign_key_column
+                    local foreign_table = selection.value.schema.foreign_key_table
 
-                    local options = {}
-                    for _, val in ipairs(related_items.data) do
-                        table.insert(options, { id = val.id, slug = val.slug })
+                    local related_url = M.config.url .. "/items/" .. foreign_table
+                    local data = api.directus_fetch(related_url, M.config.token)
+                    if data == nil then
+                        return
                     end
 
-                    vim.ui.select(options, {
-                        prompt = collection .. ": " .. filter_field,
+                    vim.ui.select(data, {
+                        prompt = collection .. ": " .. directus_field,
                         format_item = function(item)
-                            return filter_field .. ": " .. item.id .. " -> " .. item.slug
+                            return directus_field .. ": " .. item[foreign_key] .. " -> " .. item.slug
                         end,
                     }, function(choice)
-                        collection_filter[filter_field] = {
-                            _eq = choice.id
+                        collection_filter[directus_field] = {
+                            _eq = choice[foreign_key]
                         }
 
                         M.directus_filters(opts, collection, fields, collection_filter)
                     end)
-                elseif selection.value.meta.interface == "input" then
-                    local input = vim.fn.input("Filter value for " .. filter_field .. ": ")
-                    collection_filter[filter_field] = {
+                elseif directus_interface == "input" or directus_interface == "input-multiline" then
+                    local input = vim.fn.input("Filter value for " .. directus_field .. ": ")
+                    collection_filter[directus_field] = {
                         _eq = input
                     }
 
                     local data = vim.split(vim.inspect(collection_filter), "\n")
                     local display = vim.tbl_flatten({ url, data })
                     vim.api.nvim_buf_set_lines(prev_bufnr, 0, -1, true, display)
+                elseif directus_interface == "boolean" then
+                    vim.ui.select({ { display = "True", val = "1" }, { display = "False", val = "0" } }, {
+                        prompt = collection .. ": " .. directus_field,
+                        format_item = function(item)
+                            return item.display
+                        end,
+                    }, function(choice)
+                        collection_filter[directus_field] = {
+                            _eq = choice.val
+                        }
+
+                        M.directus_filters(opts, collection, fields, collection_filter)
+                    end)
+                else
+                    vim.notify("Not sure how to handle: " .. tostring(directus_interface), "info",
+                        { title = "Directus Filter" })
+                    print(vim.inspect(selection))
                 end
             end)
             return true
@@ -276,13 +298,21 @@ M.directus_filters = function(opts, collection, fields, collection_filter)
     }):find()
 end
 
-
 --------------------------------------------------------------------------------
 ---Build the filters for query
 ---@param opts any
 ---@param url string
----@param collection string
+---@param collection string | table
 M.directus_items = function(opts, url, collection)
+    if type(collection) == "string" then
+        local collection_url = M.config.url .. "/collections/" .. collection
+        local data = api.directus_fetch(collection_url, M.config.token)
+        if data == nil then
+            return
+        end
+        collection = data
+    end
+
     pickers.new(opts, {
         prompt_title = "Items",
         sorter = config.generic_sorter(opts),
@@ -290,25 +320,33 @@ M.directus_items = function(opts, url, collection)
         finder = finders.new_dynamic({
             fn = function()
                 local data = api.directus_fetch(url, M.config.token)
-                if data.errors ~= nil then
-                    local err = data.errors[1].message
-                    vim.notify(err, "error", { title = collection })
-                    return {}
+                if data == nil then
+                    return
+                elseif #data == 0 then
+                    vim.notify(url .. "\nNo items found", "info", { title = "Directus Items" })
                 end
 
-                return data.data
+                return data
             end,
             entry_maker = function(entry)
+                local display_template = collection.meta.display_template
+                if display_template ~= vim.NIL then
+                    -- Must not just replace
+                    -- Need to insert the value into the template {{field}}
+                    display_template = string.gsub(display_template, "{", "")
+                    display_template = string.gsub(display_template, "}", "")
+                end
+
                 return {
                     value = entry,
-                    display = entry.slug .. " " .. entry.region,
+                    display = entry.slug,
                     ordinal = entry.slug,
                 }
             end
         }),
 
         previewer = previewers.new_buffer_previewer({
-            title = "" .. collection,
+            title = collection.collection,
             define_preview = function(self, entry)
                 local item_data = vim.split(vim.inspect(entry.value), "\n")
                 local display = vim.tbl_flatten({ "", item_data })
@@ -318,12 +356,12 @@ M.directus_items = function(opts, url, collection)
         }),
 
         attach_mappings = function(prompt_bufnr, map)
-            map("i", "cc", function(bufnr)
+            map("n", "c", function(bufnr)
                 M.directus_collections({})
             end)
 
-            map("i", "ff", function(bufnr)
-                M.directus_fields({}, collection)
+            map("n", "f", function(bufnr)
+                M.directus_fields({}, collection.collection)
             end)
 
             return true
@@ -356,9 +394,12 @@ M.setup = function(directus_config)
                 -- :Directus Fields
                 local url = M.config.url .. "/collections"
                 local data = api.directus_fetch(url, M.config.token)
+                if data == nil then
+                    return
+                end
 
                 local collections = {}
-                for _, val in ipairs(utils.filter_hidden(data.data)) do
+                for _, val in ipairs(utils.filter_hidden(data)) do
                     table.insert(collections, val.collection)
                 end
 

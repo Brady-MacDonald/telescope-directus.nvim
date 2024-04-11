@@ -23,7 +23,7 @@ end
 ---Make HTTP request to directus
 ---@param url string Directus URL
 ---@param token string access token with admin credentials
----@return table
+---@return table | nil data The directus response data or nil on error
 Q.directus_fetch = function(url, token)
     local auth = "Authorization: Bearer " .. token
     local plenary_res = plenary.job:new({
@@ -32,16 +32,19 @@ Q.directus_fetch = function(url, token)
     }):sync()
 
     if #plenary_res == 0 then
-        vim.notify("Bad")
-        return {
-            errors = {
-                message = "Unable to make plenary curl request"
-            }
-        }
+        vim.notify("Unable to make curl request", "error", { title = "Plenary Error" })
+        return nil
     end
 
     local data = vim.json.decode(plenary_res[1])
-    return data
+    if data.errors ~= nil then
+        local directus_err = data.errors[1].message
+        local err = directus_err .. "\n" .. url
+        vim.notify(err, "error", { title = "Directus Error" })
+        return nil
+    end
+
+    return data.data
 end
 
 return Q
