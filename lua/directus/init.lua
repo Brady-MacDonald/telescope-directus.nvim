@@ -5,7 +5,6 @@ local previewers = require("telescope.previewers")
 local finders = require("telescope.finders")
 local config = require("telescope.config").values
 
-local filter = require("directus.filter")
 local api = require("directus.api")
 local utils = require("directus.utils")
 
@@ -17,12 +16,10 @@ M = {}
 ---@field meta table
 ---@field schema table
 
----@class config
+---@class user_config
 ---@field url string The directus url
 ---@field token string Access token with admin credentials
 ---@field show_hidden boolean Display any hidden collection/fields
-
-M.config = {}
 
 --------------------------------------------------------------------------------
 ---Get all Directus Collections
@@ -35,7 +32,7 @@ M.directus_collections = function(opts)
         finder = finders.new_dynamic({
             fn = function()
                 local url = M.config.url .. "/collections"
-                local data = api.directus_fetch(url, M.config.token)
+                local data = M._directus_api(url)
                 if data == nil then
                     return
                 end
@@ -74,7 +71,7 @@ M.directus_collections = function(opts)
                 local drop_down = require("telescope.themes").get_dropdown({})
 
                 local url = M.config.url .. "/fields/" .. selection.value.collection
-                local data = api.directus_fetch(url, M.config.token)
+                local data = api._directus_api(url)
                 if data == nil then
                     return
                 end
@@ -107,8 +104,7 @@ M.directus_fields = function(opts, collection)
         finder = finders.new_dynamic({
             fn = function()
                 local url = M.config.url .. "/fields/" .. collection
-
-                local data = api.directus_fetch(url, M.config.token)
+                local data = api._directus_api(url)
                 if data == nil then
                     return
                 end
@@ -306,10 +302,11 @@ end
 M.directus_items = function(opts, url, collection)
     if type(collection) == "string" then
         local collection_url = M.config.url .. "/collections/" .. collection
-        local data = api.directus_fetch(collection_url, M.config.token)
+        local data = api._directus_api(collection_url)
         if data == nil then
             return
         end
+
         collection = data
     end
 
@@ -319,7 +316,7 @@ M.directus_items = function(opts, url, collection)
 
         finder = finders.new_dynamic({
             fn = function()
-                local data = api.directus_fetch(url, M.config.token)
+                local data = api._directus_api(url)
                 if data == nil then
                     return
                 elseif #data == 0 then
@@ -370,10 +367,14 @@ M.directus_items = function(opts, url, collection)
 end
 
 --------------------------------------------------------------------------------
----Set up the directus.nvim plugin
----@param directus_config config
+---Set up the telescope-directus.nvim
+---@param directus_config user_config
 M.setup = function(directus_config)
-    M.config = directus_config
+    M._directus_api = api.make_directus_api(directus_config.token)
+    M.config = {
+        url = directus_config.url,
+        show_hidden = directus_config.show_hidden
+    }
 
     vim.api.nvim_create_user_command("Directus", function(opts)
         if opts.fargs[1] == "collections" then
@@ -393,7 +394,7 @@ M.setup = function(directus_config)
             if string.match(cmd, "fields") then
                 -- :Directus Fields
                 local url = M.config.url .. "/collections"
-                local data = api.directus_fetch(url, M.config.token)
+                local data = api._directus_api(url)
                 if data == nil then
                     return
                 end
