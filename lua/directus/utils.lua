@@ -1,4 +1,4 @@
-U = {}
+local UTILS = {}
 
 ---Merge the two input arrays into one sorted array
 ---@param left table
@@ -51,7 +51,7 @@ end
 ---Sort given input array on meta.sort property
 ---Uses MergeSort algorithm
 ---@param arr table Sort table
-U.merge_sort = function(arr)
+UTILS.merge_sort = function(arr)
     if #arr <= 1 then
         return
     end
@@ -68,8 +68,8 @@ U.merge_sort = function(arr)
         end
     end
 
-    U.merge_sort(left)
-    U.merge_sort(right)
+    UTILS.merge_sort(left)
+    UTILS.merge_sort(right)
 
     merge(left, right, arr)
 end
@@ -77,8 +77,10 @@ end
 ---Filter the input
 ---@param data table Input data
 ---@return table collections The filtered data
-U.filter_hidden = function(data)
-    if M.config.show_hidden then
+UTILS.filter_hidden = function(data)
+    local directus = require("directus")
+
+    if directus.config.show_hidden then
         return data
     end
 
@@ -92,4 +94,4 @@ U.filter_hidden = function(data)
     return filtered_data
 end
 
-return U
+return UTILS
