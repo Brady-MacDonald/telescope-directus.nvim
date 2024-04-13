@@ -2,7 +2,7 @@ local plenary = require("plenary")
 
 local API = {}
 
----
+---Get the items in a collection
 ---@param collection string
 ---@param query table|nil
 ---@return table|nil
@@ -10,7 +10,12 @@ API.get_items = function(collection, query)
     local directus = require("directus")
     local utils = require("directus.utils")
 
-    local data = directus._directus_api("/items/" .. collection)
+    local filter = ""
+    if query ~= nil then
+        filter = "?filter=" .. vim.json.encode(query)
+    end
+
+    local data = directus._directus_api("/items/" .. collection .. filter)
     if data == nil then
         return nil
     end
@@ -18,6 +23,9 @@ API.get_items = function(collection, query)
     return data
 end
 
+---Get all fields for a given collection
+---@param collection string
+---@return nil
 API.get_fields = function(collection)
     local directus = require("directus")
     local utils = require("directus.utils")
@@ -37,7 +45,7 @@ end
 
 ---Get Collection info
 ---@param collection string|nil Collection to get info for, or all collections if nil
----@return table|nil
+---@return Collection|Collection[]|nil
 API.get_collections = function(collection)
     local directus = require("directus")
     local utils = require("directus.utils")
@@ -51,23 +59,7 @@ API.get_collections = function(collection)
     return collections
 end
 
----Build the directus URL for getting items
----@param config user_config Users config
----@param collection string Directus collection to query
----@return string url
-API.items_url = function(config, collection, fields)
-    local url = config.url .. "/items/" .. collection
-
-    local filter = "?"
-    for _, val in ipairs(fields) do
-        filter = filter .. "&filter[" .. val.field .. "]=" .. "best-sportsbooks"
-    end
-
-    url = url .. filter
-    return url
-end
-
----Create closure for auth_header
+---Create closure for directus token and url
 ---@param token string Directus admin token
 ---@param url string Directus URL
 ---@return function directus_api Used to make authenticated requests to directus

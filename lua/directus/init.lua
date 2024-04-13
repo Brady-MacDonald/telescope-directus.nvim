@@ -173,7 +173,6 @@ M.directus_filters = function(opts, collection, fields, collection_filter)
         return
     end
 
-    local query = "/items/" .. collection .. "?filter="
     local prev_bufnr
 
     pickers.new(opts, {
@@ -194,8 +193,8 @@ M.directus_filters = function(opts, collection, fields, collection_filter)
         previewer = previewers.new_buffer_previewer({
             title = collection .. " query",
             define_preview = function(self, entry)
-                local data = vim.split(vim.inspect(collection_filter), "\n")
-                local display = vim.tbl_flatten({ M.config.url .. query, data })
+                local filter = vim.split(vim.inspect(collection_filter), "\n")
+                local display = vim.tbl_flatten({ M.config.url .. "/items?filter=", filter })
 
                 vim.api.nvim_buf_set_lines(self.state.bufnr, 0, 0, true, display)
                 prev_bufnr = self.state.bufnr
@@ -212,8 +211,7 @@ M.directus_filters = function(opts, collection, fields, collection_filter)
             end)
 
             map("n", "s", function(bufnr)
-                query = query .. vim.json.encode(collection_filter)
-                M.directus_items({}, query, collection)
+                M.directus_items({}, collection, collection_filter)
             end)
 
             actions.select_default:replace(function()
@@ -264,8 +262,9 @@ M.directus_filters = function(opts, collection, fields, collection_filter)
                         _eq = input
                     }
 
-                    local data = vim.split(vim.inspect(collection_filter), "\n")
-                    local display = vim.tbl_flatten({ query, data })
+                    local filter = vim.split(vim.inspect(collection_filter), "\n")
+                    local display = vim.tbl_flatten({ M.config.url .. "/items?filter=", filter })
+
                     vim.api.nvim_buf_set_lines(prev_bufnr, 0, -1, true, display)
                 elseif directus_interface == "boolean" then
                     vim.ui.select({ { display = "True", val = "1" }, { display = "False", val = "0" } }, {
@@ -293,12 +292,11 @@ M.directus_filters = function(opts, collection, fields, collection_filter)
     }):find()
 end
 
---------------------------------------------------------------------------------
 ---Build the filters for query
 ---@param opts any
----@param url string
 ---@param collection string|Collection
-M.directus_items = function(opts, url, collection)
+---@param query table|nil
+M.directus_items = function(opts, collection, query)
     if type(collection) == "string" then
         collection = api.get_collections(collection)
         if collection == nil then return end
@@ -310,11 +308,11 @@ M.directus_items = function(opts, url, collection)
 
         finder = finders.new_dynamic({
             fn = function()
-                local data = M._directus_api(url)
+                local data = api.get_items(collection.collection, query)
                 if data == nil then
                     return
                 elseif #data == 0 then
-                    vim.notify(url .. "\nNo items found", "info", { title = "Directus Items" })
+                    vim.notify(collection.collection .. "\nNo items found", "info", { title = "Directus Items" })
                 end
 
                 return data
