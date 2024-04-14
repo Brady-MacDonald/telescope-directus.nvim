@@ -294,12 +294,13 @@ end
 
 ---Build the filters for query
 ---@param opts any
----@param collection string|Collection
----@param query table|nil
-M.directus_items = function(opts, collection, query)
+---@param collection string|Collection Name of collection of the Collection data object
+---@param filter table|nil
+M.directus_items = function(opts, collection, filter)
     if type(collection) == "string" then
-        collection = api.get_collections(collection)
-        if collection == nil then return end
+        local collection_data = api.get_collections(collection)
+        if collection_data == nil then return end
+        collection = collection_data
     end
 
     pickers.new(opts, {
@@ -308,7 +309,7 @@ M.directus_items = function(opts, collection, query)
 
         finder = finders.new_dynamic({
             fn = function()
-                local data = api.get_items(collection.collection, query)
+                local data = api.get_items(collection.collection, filter, "*.*")
                 if data == nil then
                     return
                 elseif #data == 0 then

@@ -1,21 +1,29 @@
+local utils = require("directus.utils")
 local plenary = require("plenary")
 
 local API = {}
 
 ---Get the items in a collection
----@param collection string
----@param query table|nil
+---@param collection string Directus collection to get items for
+---@param filter table|nil Filter to apply to query
+---@param fields string|nil Fields to populate values for
 ---@return table|nil
-API.get_items = function(collection, query)
+API.get_items = function(collection, filter, fields)
     local directus = require("directus")
-    local utils = require("directus.utils")
 
-    local filter = ""
-    if query ~= nil then
-        filter = "?filter=" .. vim.json.encode(query)
+    local dir_fields = "?fields=*"
+    if fields ~= nil then
+        dir_fields = "?fields=" .. fields
     end
 
-    local data = directus._directus_api("/items/" .. collection .. filter)
+    local dir_filter = ""
+    if filter ~= nil then
+        dir_filter = "&filter=" .. vim.json.encode(filter)
+    end
+
+    local url = "/items/" .. collection .. dir_fields .. dir_filter
+
+    local data = directus._directus_api(url)
     if data == nil then
         return nil
     end
@@ -28,7 +36,6 @@ end
 ---@return nil
 API.get_fields = function(collection)
     local directus = require("directus")
-    local utils = require("directus.utils")
 
     local data = directus._directus_api("/fields/" .. collection)
     if data == nil then
@@ -48,7 +55,6 @@ end
 ---@return Collection|Collection[]|nil
 API.get_collections = function(collection)
     local directus = require("directus")
-    local utils = require("directus.utils")
 
     local data = directus._directus_api("/collections/" .. (collection or ""))
     if data == nil then
