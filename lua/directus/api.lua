@@ -5,23 +5,31 @@ local API = {}
 
 ---Get the items in a collection
 ---@param collection string Directus collection to get items for
----@param filter table|nil Filter to apply to query
----@param fields string|nil Fields to populate values for
+---@param params DirectusParams|nil
 ---@return table|nil
-API.get_items = function(collection, filter, fields)
+API.get_items = function(collection, params)
     local directus = require("directus")
 
-    local dir_fields = "?fields=*"
-    if fields ~= nil then
-        dir_fields = "?fields=" .. fields
-    end
+    local url = "/items/" .. collection
 
-    local dir_filter = ""
-    if filter ~= nil then
-        dir_filter = "&filter=" .. vim.json.encode(filter)
-    end
+    if params ~= nil then
+        local fields = "?fields=*"
+        if params.fields ~= nil then
+            fields = "?fields=" .. fields
+        end
 
-    local url = "/items/" .. collection .. dir_fields .. dir_filter
+        local filter = ""
+        if params.filter ~= nil then
+            filter = "&filter=" .. vim.json.encode(params.filter)
+        end
+
+        local limit = ""
+        if params.limit ~= nil then
+            limit = "&limit=" .. tostring(params.limit)
+        end
+
+        url = url .. fields .. filter .. limit
+    end
 
     local data = directus._directus_api(url)
     if data == nil then
