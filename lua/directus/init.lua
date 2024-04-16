@@ -83,7 +83,7 @@ M.directus_collections = function(opts)
                 utils.merge_sort(fields)
 
                 actions.close(prompt_bufnr)
-                M.directus_params(drop_down, selection.value.collection, fields,
+                M.directus_params(drop_down, selection.value, fields,
                     { filter = {}, fields = nil, limit = nil })
             end)
             return true
@@ -102,7 +102,6 @@ M.directus_fields = function(opts, collection)
     elseif type(collection) == "string" then
         local collection_data = api.get_collections(collection)
         if collection_data == nil then return end
-
         collection = collection_data
     end
 
@@ -161,7 +160,7 @@ M.directus_fields = function(opts, collection)
                 actions.close(prompt_bufnr)
 
                 local drop_down = require("telescope.themes").get_dropdown({})
-                M.directus_params(drop_down, collection.collection, selected_fields,
+                M.directus_params(drop_down, collection, selected_fields,
                     { filter = {}, fields = nil, limit = nil })
             end)
             return true
@@ -172,13 +171,21 @@ end
 --------------------------------------------------------------------------------
 ---Build the params to add to directus query
 ---@param opts any The telescope display options (drop_down)
----@param collection string Directus collection
+---@param collection Collection Directus collection
 ---@param fields Field[] List of selected fields
 ---@param params DirectusParams
 M.directus_params = function(opts, collection, fields, params)
     if collection == nil then
-        vim.notify("Must provide collection", "error", { title = "Directus Filters" })
+        vim.notify("Must provide collection", "error", { title = "Directus Fields" })
         return
+    elseif type(collection) == "string" then
+        local collection_data = api.get_collections(collection)
+        if collection_data == nil then return end
+        collection = collection_data
+    end
+
+    if #fields == 0 then
+        vim.notify("Get all fields?")
     end
 
     local prev_bufnr
@@ -211,15 +218,15 @@ M.directus_params = function(opts, collection, fields, params)
 
         attach_mappings = function(prompt_bufnr, map)
             map("n", "c", function(bufnr)
-                M.directus_collections({})
+                M.directus_collections()
             end)
 
             map("n", "f", function(bufnr)
-                M.directus_fields({}, collection)
+                M.directus_fields(nil, collection)
             end)
 
             map("n", "s", function(bufnr)
-                M.directus_items({}, collection, params)
+                M.directus_items(nil, collection, params)
             end)
 
             actions.select_default:replace(function()
