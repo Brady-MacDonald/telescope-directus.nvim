@@ -206,7 +206,7 @@ M.directus_params = function(opts, collection, fields, params)
         }),
 
         previewer = previewers.new_buffer_previewer({
-            title = collection .. " query",
+            title = collection.collection .. " query",
             define_preview = function(self, entry)
                 local params_json = vim.split(vim.inspect(params), "\n")
                 local display = vim.tbl_flatten({ M.config.url .. "/items?", params_json })
@@ -237,7 +237,7 @@ M.directus_params = function(opts, collection, fields, params)
 
                 if directus_interface == "select-dropdown" then
                     vim.ui.select(selection.value.meta.options.choices, {
-                        prompt = collection .. ": " .. directus_field,
+                        prompt = collection.collection .. ": " .. directus_field,
                         format_item = function(opt)
                             return opt.text
                         end,
@@ -257,7 +257,7 @@ M.directus_params = function(opts, collection, fields, params)
                     if data == nil then return end
 
                     vim.ui.select(data, {
-                        prompt = collection .. ": " .. directus_field,
+                        prompt = collection.collection .. ": " .. directus_field,
                         format_item = function(item)
                             local slug = item.slug or "_"
                             return directus_field .. ": " .. item[foreign_key] .. " -> " .. slug
