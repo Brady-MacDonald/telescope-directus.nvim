@@ -1,0 +1,31 @@
+================================================================================
+						     *telescope-directus.nvim*
+
+Telescope extension used to browse Directus collections/fields/items
+Must call the setup() function with proper config first
+
+							    *directus.setup()*
+directus.setup({config})
+    
+    Set up the Directus client
+>
+        directus.setup({
+            url = "http://localhost:8055",
+            token = "123456789",
+            show_hidden = true
+        })
+<
+                                                  *directus.directus_fields()*
+
+directus.directus_fields({opts}, {collection})
+
+    Get all the fields for a given collection
+    Can provide either the name of the collections, of the Collection object
+>
+    directus.directus_fields(nil, "articles")
+<
+
+                                             *directus.directus_collections()*
+                                                   *directus.directus_items()*
+
+ vim:tw=78:ts=8:ft=help:norl:
