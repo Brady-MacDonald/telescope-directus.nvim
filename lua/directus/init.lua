@@ -269,8 +269,12 @@ M.directus_params = function(opts, collection, fields, params)
                     vim.ui.select(data, {
                         prompt = collection.collection .. ": " .. directus_field,
                         format_item = function(item)
-                            local slug = item.slug or "_"
-                            return directus_field .. ": " .. item[foreign_key] .. " -> " .. slug
+                            local slug = ""
+                            if item.slug ~= nil then
+                                slug = " -> " .. item.slug
+                            end
+
+                            return directus_field .. ": " .. item[foreign_key] .. slug
                         end,
                     }, function(choice, idx)
                         if not choice then return end
@@ -419,6 +423,7 @@ M.setup = function(config)
         complete = function(arg_lead, cmd, cursor_pos)
             local is_fields = string.match(cmd, "fields")
             local is_params = string.match(cmd, "params")
+            local is_collections = string.match(cmd, "collections")
 
             if is_fields or is_params then
                 -- :Directus Fields
@@ -443,11 +448,25 @@ M.setup = function(config)
                 end
 
                 return collections
-            elseif string.match(cmd, "collections") then
+            elseif is_collections then
                 -- :Directus collections
                 return {}
             else
-                return { "collections", "fields", "params" }
+                if arg_lead == "" then
+                    return { "collections", "fields", "params" }
+                end
+
+                local fields = string.match("fields", arg_lead)
+                local params = string.match("params", arg_lead)
+                local collections = string.match("collections", arg_lead)
+
+                if collections then
+                    return { "collections" }
+                elseif fields then
+                    return { "fields" }
+                elseif params then
+                    return { "params" }
+                end
             end
         end
     })
