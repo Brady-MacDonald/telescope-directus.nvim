@@ -1,12 +1,11 @@
-local M = {}
+local ok, telescope = pcall(require, "telescope")
 
-function M.telescope(opts)
-    local directus = require("directus")
-    directus.directus_collections(opts)
+if not ok then
+    error("telescope-directus.nvim requires nvim-telescope/telescope.nvim")
 end
 
-return require("telescope").register_extension({
+return telescope.register_extension({
     exports = {
-        directus = M.telescope
+        directus = require("directus").directus_collections
     },
 })

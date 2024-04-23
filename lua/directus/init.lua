@@ -3,10 +3,16 @@ local action_state = require "telescope.actions.state"
 local pickers = require("telescope.pickers")
 local previewers = require("telescope.previewers")
 local finders = require("telescope.finders")
-local config = require("telescope.config").values
+local themes = require("telescope.themes")
+local telescope_config = require("telescope.config").values
 
 local api = require("directus.api")
 local utils = require("directus.utils")
+
+local defaults = {
+    url = "http://localhost:8055",
+    show_hidden = false,
+}
 
 M = {}
 
@@ -22,7 +28,7 @@ M = {}
 ---@field meta table
 ---@field schema table
 ---
----@class user_config
+---@class Config
 ---@field url string The directus url
 ---@field token string Access token with admin credentials
 ---@field show_hidden boolean Display any hidden collection/fields
@@ -33,7 +39,7 @@ M = {}
 M.directus_collections = function(opts)
     pickers.new(opts, {
         prompt_title = "Collection",
-        sorter = config.generic_sorter(opts),
+        sorter = telescope_config.generic_sorter(opts),
 
         finder = finders.new_dynamic({
             fn = function()
@@ -72,7 +78,7 @@ M.directus_collections = function(opts)
 
             actions.select_default:replace(function()
                 local selection = action_state.get_selected_entry()
-                local drop_down = require("telescope.themes").get_dropdown({})
+                local drop_down = themes.get_dropdown(opts)
 
                 local data = api.get_fields(selection.value.collection)
                 if data == nil then
@@ -83,8 +89,7 @@ M.directus_collections = function(opts)
                 utils.merge_sort(fields)
 
                 actions.close(prompt_bufnr)
-                M.directus_params(drop_down, selection.value, fields,
-                    { filter = {}, fields = nil, limit = nil })
+                M.directus_params(drop_down, selection.value, fields, nil)
             end)
             return true
         end,
@@ -107,7 +112,7 @@ M.directus_fields = function(opts, collection)
 
     pickers.new(opts, {
         prompt_title = "Field",
-        sorter = config.generic_sorter(opts),
+        sorter = telescope_config.generic_sorter(opts),
 
         finder = finders.new_dynamic({
             fn = function()
@@ -159,9 +164,8 @@ M.directus_fields = function(opts, collection)
 
                 actions.close(prompt_bufnr)
 
-                local drop_down = require("telescope.themes").get_dropdown({})
-                M.directus_params(drop_down, collection, selected_fields,
-                    { filter = {}, fields = nil, limit = nil })
+                local drop_down = themes.get_dropdown(opts)
+                M.directus_params(drop_down, collection, selected_fields, nil)
             end)
             return true
         end,
@@ -169,11 +173,11 @@ M.directus_fields = function(opts, collection)
 end
 
 --------------------------------------------------------------------------------
----Build the params to add to directus query
+---Build the params for Directus query
 ---@param opts any The telescope display options (drop_down)
----@param collection Collection Directus collection
+---@param collection Collection|string Directus collection
 ---@param fields Field[] List of selected fields
----@param params DirectusParams
+---@param params DirectusParams|nil
 M.directus_params = function(opts, collection, fields, params)
     if collection == nil then
         vim.notify("Must provide collection", "error", { title = "Directus Fields" })
@@ -184,15 +188,21 @@ M.directus_params = function(opts, collection, fields, params)
         collection = collection_data
     end
 
-    if #fields == 0 then
-        vim.notify("Get all fields?")
+    if fields == nil or #fields == 0 then
+        local fields_data = api.get_fields(collection.collection)
+        if fields_data == nil then return end
+        fields = fields_data
+    end
+
+    if params == nil then
+        params = utils.new_query_params()
     end
 
     local prev_bufnr
 
     pickers.new(opts, {
-        prompt_title = "Filters",
-        sorter = config.generic_sorter(opts),
+        prompt_title = "Query Filters",
+        sorter = telescope_config.generic_sorter(opts),
 
         finder = finders.new_table({
             results = fields,
@@ -325,7 +335,7 @@ M.directus_items = function(opts, collection, filter)
 
     pickers.new(opts, {
         prompt_title = "Items",
-        sorter = config.generic_sorter(opts),
+        sorter = telescope_config.generic_sorter(opts),
 
         finder = finders.new_dynamic({
             fn = function()
@@ -379,19 +389,15 @@ M.directus_items = function(opts, collection, filter)
 end
 
 --------------------------------------------------------------------------------
----Set up the telescope-directus.nvim
----@param directus_config user_config
-M.setup = function(directus_config)
-    if not directus_config or not directus_config.url or not directus_config.token then
+---@param config Config
+M.setup = function(config)
+    if not config or not config.token then
         vim.notify("Must provide Config", "error", { title = "Directus Telescope" })
         return
     end
 
-    M._directus_api = api.make_directus_api(directus_config.token, directus_config.url)
-    M.config = {
-        url = directus_config.url,
-        show_hidden = directus_config.show_hidden
-    }
+    M.config = vim.tbl_extend("force", defaults, config)
+    M._directus_api = api.make_directus_api(config.token, config.url)
 
     vim.api.nvim_create_user_command("Directus", function(opts)
         if opts.fargs[1] == "collections" then
@@ -403,13 +409,21 @@ M.setup = function(directus_config)
             else
                 M.directus_fields(nil, collection)
             end
+        elseif opts.fargs[1] == "params" then
+            local collection = opts.fargs[2]
+            M.directus_params(themes.get_dropdown({}), collection, {}, nil)
         end
     end, {
         nargs = "+",
         desc = "Directus user command",
         complete = function(arg_lead, cmd, cursor_pos)
-            if string.match(cmd, "fields") then
+            local is_fields = string.match(cmd, "fields")
+            local is_params = string.match(cmd, "params")
+
+            if is_fields or is_params then
                 -- :Directus Fields
+                -- :Directus Params
+
                 local data = api.get_collections()
                 if data == nil then return end
 
@@ -433,7 +447,7 @@ M.setup = function(directus_config)
                 -- :Directus collections
                 return {}
             else
-                return { "collections", "fields" }
+                return { "collections", "fields", "params" }
             end
         end
     })

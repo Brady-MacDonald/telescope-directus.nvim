@@ -94,4 +94,8 @@ UTILS.filter_hidden = function(data)
     return filtered_data
 end
 
+UTILS.new_query_params = function()
+    return { filter = {}, fields = nil, limit = nil }
+end
+
 return UTILS

@@ -7,7 +7,20 @@ end
 HEALTH.check = function()
     vim.health.start("Directus report")
 
-    -- make sure setup function parameters are ok
+    local ok_telescope, _ = pcall(require, "telescope")
+    if not ok_telescope then
+        vim.health.error("telescope-directus.nvim requires nvim-telescope/telescope.nvim")
+    else
+        vim.health.ok("telescope.nvim is installed")
+    end
+
+    local ok_plenary, _ = pcall(require, "telescope")
+    if not ok_plenary then
+        vim.health.error("telescope-directus.nvim requires plenaty")
+    else
+        vim.health.ok("plenary is installed")
+    end
+
     if check_setup() then
         vim.health.ok("Directus URL is good")
         vim.health.ok("Directus admin token is good")
