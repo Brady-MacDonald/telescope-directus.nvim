@@ -152,6 +152,14 @@ M.directus_fields = function(opts, collection)
                 M.directus_collections(opts)
             end)
 
+            map("n", "d", function()
+                -- Open fields content in buffer
+                local selection = action_state.get_selected_entry()
+                local field = selection.value
+
+                api.delete_field(collection.collection, field.field)
+            end)
+
             actions.select_default:replace(function()
                 local single_selection = action_state.get_selected_entry()
                 local picker = action_state.get_current_picker(prompt_bufnr)

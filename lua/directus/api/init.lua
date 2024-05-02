@@ -31,7 +31,7 @@ API.get_items = function(collection, params)
         url = url .. fields .. filter .. limit
     end
 
-    local data = directus._directus_api(url)
+    local data = directus._directus_api.get(url)
     if data == nil then
         return nil
     end
@@ -45,7 +45,7 @@ end
 API.get_fields = function(collection)
     local directus = require("directus")
 
-    local data = directus._directus_api("/fields/" .. collection)
+    local data = directus._directus_api.get("/fields/" .. collection)
     if data == nil then
         return nil
     end
@@ -58,13 +58,27 @@ API.get_fields = function(collection)
     return fields
 end
 
+---Delete a field from a collection
+---@param collection string
+---@param field string
+API.delete_field = function(collection, field)
+    local directus = require("directus")
+
+    local res_status = directus._directus_api.delete("/fields/" .. collection .. "/" .. field)
+    if not res_status then
+        return nil
+    end
+
+    return res_status
+end
+
 ---Get Collection info
 ---@param collection string|nil Collection to get info for, or all collections if nil
 ---@return Collection|Collection[]|nil
 API.get_collections = function(collection)
     local directus = require("directus")
 
-    local data = directus._directus_api("/collections/" .. (collection or ""))
+    local data = directus._directus_api.get("/collections/" .. (collection or ""))
     if data == nil then
         return nil
     end
@@ -73,17 +87,21 @@ API.get_collections = function(collection)
     return collections
 end
 
+---@class DirectusApi
+---@field get function
+---@field delete function
+
 ---Create closure for directus token and url
 ---@param token string Directus admin token
 ---@param url string Directus URL
----@return function directus_api Used to make authenticated requests to directus
+---@return DirectusApi directus_api Used to make authenticated requests to directus
 API.make_directus_api = function(token, url)
     local auth_header = "Authorization: Bearer " .. token
 
-    ---Make HTTP request to directus
+    ---Make HTTP GET request to directus
     ---@param query string Directus query appended to url
     ---@return table|nil data The directus response data or nil on error
-    return function(query)
+    local function get(query)
         local plenary_res = plenary.job:new({
             command = "curl",
             args = { "-H", auth_header, "-g", url .. query }
@@ -104,6 +122,29 @@ API.make_directus_api = function(token, url)
 
         return data.data
     end
+
+    ---Make HTTP DELETE request to directus
+    ---@param query string Directus query appended to url
+    ---@return boolean data Indicate if delete was a success
+    local function delete(query)
+        P(query)
+        local plenary_res = plenary.job:new({
+            command = "curl",
+            args = { "-H", auth_header, "-X", "DELETE", "-g", url .. query }
+        }):sync()
+
+        if not plenary_res then
+            vim.notify("Unable to make DELETE curl request", "error", { title = "Plenary Error" })
+            return false
+        end
+
+        return true
+    end
+
+    return {
+        get = get,
+        delete = delete
+    }
 end
 
 return API
