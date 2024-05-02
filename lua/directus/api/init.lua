@@ -71,6 +71,27 @@ API.delete_field = function(collection, field)
 
     return res_status
 end
+---
+---Delete a field from a collection
+---@param collection string
+---@param field Field
+API.create_field = function(collection, field)
+    local directus = require("directus")
+
+    field.collection = collection
+    field.meta.collection = collection
+    field.meta.id = nil
+    field.meta.sort = nil
+    field.meta.group = nil
+    field.schema = nil
+
+    local data = directus._directus_api.post("/fields/" .. collection, field)
+    if data == nil then
+        return nil
+    end
+
+    return data
+end
 
 ---Get Collection info
 ---@param collection string|nil Collection to get info for, or all collections if nil
@@ -89,6 +110,7 @@ end
 
 ---@class DirectusApi
 ---@field get function
+---@field post function
 ---@field delete function
 
 ---Create closure for directus token and url
@@ -108,7 +130,36 @@ API.make_directus_api = function(token, url)
         }):sync()
 
         if not plenary_res or #plenary_res == 0 then
-            vim.notify("Unable to make curl request", "error", { title = "Plenary Error" })
+            vim.notify("Unable to make GET request", "error", { title = "Plenary Error" })
+            return nil
+        end
+
+        local data = vim.json.decode(plenary_res[1])
+        if data.errors ~= nil then
+            local directus_err = data.errors[1].message
+            local err = directus_err .. "\n" .. url
+            vim.notify(err, "error", { title = "Directus Error" })
+            return nil
+        end
+
+        return data.data
+    end
+
+    ---Make HTTP DELETE request to directus
+    ---@param query string Directus query appended to url
+    ---@param body table Directus post content
+    ---@return table|nil data The directus response data or nil on error
+    local function post(query, body)
+        local content_header = "Content-Type: application/json"
+        local body_json = vim.json.encode(body)
+
+        local plenary_res = plenary.job:new({
+            command = "curl",
+            args = { "-H", auth_header, "-H", content_header, "-X", "POST", "-d", body_json, "-g", url .. query }
+        }):sync()
+
+        if not plenary_res or #plenary_res == 0 then
+            vim.notify("Unable to make POST request", "error", { title = "Plenary Error" })
             return nil
         end
 
@@ -127,14 +178,13 @@ API.make_directus_api = function(token, url)
     ---@param query string Directus query appended to url
     ---@return boolean data Indicate if delete was a success
     local function delete(query)
-        P(query)
         local plenary_res = plenary.job:new({
             command = "curl",
             args = { "-H", auth_header, "-X", "DELETE", "-g", url .. query }
         }):sync()
 
         if not plenary_res then
-            vim.notify("Unable to make DELETE curl request", "error", { title = "Plenary Error" })
+            vim.notify("Unable to make DELETE request", "error", { title = "Plenary Error" })
             return false
         end
 
@@ -143,6 +193,7 @@ API.make_directus_api = function(token, url)
 
     return {
         get = get,
+        post = post,
         delete = delete
     }
 end
