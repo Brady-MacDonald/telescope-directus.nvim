@@ -16,18 +16,45 @@ local defaults = {
 
 M = {}
 
+---@class FieldMeta
+---@field id number
+---@field sort number
+---@field group string
+---@field field string
+---@field collection string
+---@field display string
+
+---@class FieldSchema
+---@field default_value any
+---@field comment string
+
 ---@class Field
 ---@field collection string
+---@field field string
 ---@field type string
----@field meta table
----@field schema table
+---@field meta FieldMeta
+---@field schema FieldSchema
+
+--------------------------------------------------------------------------------
+
+---@class CollectionMeta
+---@field id number
+---@field sort number
+---@field field string
+---@field collection string
+---@field display string
+
+---@class CollectionSchema
+---@field default_value any
+---@field comment string
 
 ---@class Collection
 ---@field collection string
----@field type string
----@field meta table
----@field schema table
----
+---@field meta CollectionMeta
+---@field schema CollectionSchema
+
+--------------------------------------------------------------------------------
+
 ---@class Config
 ---@field url string The directus url
 ---@field token string Access token with admin credentials
@@ -152,12 +179,42 @@ M.directus_fields = function(opts, collection)
                 M.directus_collections(opts)
             end)
 
+            -- Delete Field
             map("n", "d", function()
-                -- Open fields content in buffer
-                local selection = action_state.get_selected_entry()
-                local field = selection.value
+                local single_selection = action_state.get_selected_entry()
+                local picker = action_state.get_current_picker(prompt_bufnr)
+                local multi_selections = picker:get_multi_selection()
 
-                api.delete_field(collection.collection, field.field)
+                local selected_fields = { single_selection.value }
+                for _, selection in ipairs(multi_selections) do
+                    table.insert(selected_fields, selection.value)
+                end
+
+                api.delete_field(collection.collection, selected_fields)
+                M.directus_fields(opts, collection)
+            end)
+
+            -- Create Field
+            map("n", "p", function()
+                local selected_field = action_state.get_selected_entry().value
+                local collections = api.get_collections()
+                if collections == nil then return end
+
+                vim.ui.select(collections, {
+                    prompt = "Collection to create field",
+                    format_item = function(opt)
+                        return opt.collection
+                    end,
+                }, function(choice)
+                    if not choice then return end
+                    api.create_field(choice.collection, selected_field)
+                    M.directus_fields(opts, choice)
+                end)
+            end)
+
+            map("n", "o", function()
+                -- Open fields content in buffer
+                M.directus_collections(opts)
             end)
 
             actions.select_default:replace(function()

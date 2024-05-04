@@ -60,16 +60,19 @@ end
 
 ---Delete a field from a collection
 ---@param collection string
----@param field string
-API.delete_field = function(collection, field)
+---@param fields Field[] List of fields to delete
+---@return boolean success True if all fields successfully deleted
+API.delete_field = function(collection, fields)
     local directus = require("directus")
 
-    local res_status = directus._directus_api.delete("/fields/" .. collection .. "/" .. field)
-    if not res_status then
-        return nil
+    for _, field in ipairs(fields) do
+        local res_status = directus._directus_api.delete("/fields/" .. collection .. "/" .. field.field)
+        if not res_status then
+            return false
+        end
     end
 
-    return res_status
+    return true
 end
 ---
 ---Delete a field from a collection
