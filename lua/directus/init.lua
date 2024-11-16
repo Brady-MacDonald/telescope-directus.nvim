@@ -8,11 +8,7 @@ local telescope_config = require("telescope.config").values
 
 local api = require("directus.api")
 local utils = require("directus.utils")
-
-local defaults = {
-    url = "http://localhost:8055",
-    show_hidden = false,
-}
+local config = require("directus.config")
 
 M = {}
 
@@ -55,12 +51,6 @@ M = {}
 
 --------------------------------------------------------------------------------
 
----@class Config
----@field url string The directus url
----@field token string Access token with admin credentials
----@field show_hidden boolean Display any hidden collection/fields
-
---------------------------------------------------------------------------------
 ---Get all Directus Collections
 ---@param opts any
 M.directus_collections = function(opts)
@@ -458,15 +448,18 @@ M.directus_items = function(opts, collection, filter)
 end
 
 --------------------------------------------------------------------------------
----@param config Config
-M.setup = function(config)
-    if not config or not config.token then
-        vim.notify("Must provide Config", "error", { title = "Directus Telescope" })
+---@param opts Config
+M.setup = function(opts)
+    vim.print(vim.inspect(opts))
+    if not opts or not opts.token then
+        vim.notify("Must provide Config", vim.log.levels.ERROR, { title = "Directus Telescope" })
         return
     end
 
-    M.config = vim.tbl_extend("force", defaults, config)
-    M._directus_api = api.make_directus_api(config.token, config.url)
+    config.set(opts)
+    M.config = config.get()
+
+    M._directus_api = api.make_directus_api(M.config.token, M.config.url)
 
     vim.api.nvim_create_user_command("Directus", function(opts)
         if opts.fargs[1] == "collections" then
@@ -474,7 +467,7 @@ M.setup = function(config)
         elseif opts.fargs[1] == "fields" then
             local collection = opts.fargs[2]
             if collection == nil then
-                vim.notify("Must specify collection", "warn", { title = "Directus Fields" })
+                vim.notify("Must specify collection", vim.log.levels.WARN, { title = "Directus Fields" })
             else
                 M.directus_fields(nil, collection)
             end

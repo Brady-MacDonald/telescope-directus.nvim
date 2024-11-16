@@ -1,3 +1,5 @@
+local config = require("directus.config").get()
+
 local UTILS = {}
 
 ---Merge the two input arrays into one sorted array
@@ -80,7 +82,7 @@ end
 UTILS.filter_hidden = function(data)
     local directus = require("directus")
 
-    if directus.config.show_hidden then
+    if config.show_hidden then
         return data
     end
 
