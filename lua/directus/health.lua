@@ -21,6 +21,9 @@ HEALTH.check = function()
         vim.health.ok("plenary is installed")
     end
 
+    -- TODO: Check for curl/wget
+    -- check $(which curl) to ensure curl is installed
+
     if check_setup() then
         vim.health.ok("Directus URL is good")
         vim.health.ok("Directus admin token is good")

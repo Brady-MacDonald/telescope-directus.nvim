@@ -10,7 +10,7 @@ local api = require("directus.api")
 local utils = require("directus.utils")
 local config = require("directus.config")
 
-M = {}
+local M = {}
 
 ---@class FieldMeta
 ---@field id number
@@ -367,7 +367,6 @@ M.directus_params = function(opts, collection, fields, params)
                 else
                     vim.notify("Not sure how to handle: " .. tostring(directus_interface), "info",
                         { title = "Directus Filter" })
-                    print(vim.inspect(selection))
                 end
             end)
             return true
@@ -450,7 +449,6 @@ end
 --------------------------------------------------------------------------------
 ---@param opts Config
 M.setup = function(opts)
-    vim.print(vim.inspect(opts))
     if not opts or not opts.token then
         vim.notify("Must provide Config", vim.log.levels.ERROR, { title = "Directus Telescope" })
         return
